@@ -13,7 +13,6 @@ It runs **entirely on free services**. There's no server, no coding agent, and n
 | `Code.gs` | The whole system. You paste it into a Google Sheet (*Extensions → Apps Script*). You never need to edit it. |
 | `SETUP.md` | Detailed step-by-step setup and troubleshooting. |
 | `tests/run-tests.js` | Offline automated tests (fake Google services + fake AI). Run with `node tests/run-tests.js`. |
-| `.github/workflows/tests.yml` | Runs the tests automatically on GitHub on every push. |
 | `README.md` | This overview. |
 
 ---
@@ -134,7 +133,6 @@ These tests replace Google Docs, Drive, Sheets and the AI with fakes. They check
   - the original template is never modified
   - a changed template is detected
 
-GitHub runs the same tests on every push (see the **Actions** tab).
 
 ## Coverage, honestly
 
