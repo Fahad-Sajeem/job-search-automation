@@ -110,11 +110,15 @@ const ADZUNA_COUNTRIES = ['gb', 'us', 'at', 'au', 'be', 'br', 'ca', 'ch', 'de', 
  * ==========================================================================*/
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('🤖 AI Job Search')
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🤖 AI Job Search')
     .addItem('1. Initial setup', 'setup')
     .addItem('2. Set API keys', 'setApiKeys')
     .addItem('3. Upload my resume (base template)', 'uploadResumeDialog')
     .addItem('4. Test connections', 'testConnections')
+    .addSubMenu(ui.createMenu('🧪 Test tools')
+      .addItem('Test resume generation (paste a job)', 'testResumeDialog')
+      .addItem('Preview job search (no AI, nothing saved)', 'previewJobSearch'))
     .addSeparator()
     .addItem('▶ Run job search now', 'runNow')
     .addItem('⏰ Enable daily run (9 AM)', 'enableDailyRun')
@@ -123,6 +127,101 @@ function onOpen() {
     .addItem('📄 Re-read my resume', 'refreshResumeMenu')
     .addItem('🔁 Retry failed jobs', 'retryFailed')
     .addToUi();
+}
+
+/* ---------------------------- test tools -----------------------------------*/
+
+const TEST_DIALOG_HTML = `
+<style>
+  body{font-family:Arial,sans-serif;font-size:13px;color:#222}
+  label{font-weight:bold}
+  input,textarea{width:100%;box-sizing:border-box;margin:4px 0 10px;padding:6px;font:inherit}
+  textarea{height:170px}
+  button{padding:8px 14px;font-weight:bold}
+  .row{margin:8px 0;padding:6px 8px;border-left:3px solid #c5cae9;background:#fafafa}
+  .old{color:#a00;text-decoration:line-through}
+  .new{color:#0a6b0a;margin-top:3px}
+  .muted{color:#666}
+</style>
+<label>Job title</label><input id="t" placeholder="e.g. Data Analyst">
+<label>Company</label><input id="c" placeholder="e.g. Acme">
+<label>Job description (paste the full text from any job posting)</label><textarea id="d"></textarea>
+<button id="b" onclick="go()">Score &amp; generate test resume</button>
+<p class="muted">Creates a TEST_ copy of your template in the Drive folder. Nothing is added to the Tracker.</p>
+<div id="s"></div><div id="out"></div>
+<script>
+function el(tag, cls, text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+function go(){
+  var t=document.getElementById('t').value.trim(),c=document.getElementById('c').value.trim(),d=document.getElementById('d').value.trim();
+  var s=document.getElementById('s'),out=document.getElementById('out'),b=document.getElementById('b');
+  if(!t||!c||d.length<200){s.textContent='Fill in all three fields (description at least 200 characters).';return;}
+  b.disabled=true;out.innerHTML='';s.textContent='Scoring and tailoring your resume… (30–90 seconds)';
+  google.script.run.withSuccessHandler(show).withFailureHandler(function(e){s.textContent='❌ '+e.message;b.disabled=false;}).runResumeTest(t,c,d);
+}
+function show(r){
+  var out=document.getElementById('out');document.getElementById('b').disabled=false;document.getElementById('s').textContent='';
+  out.appendChild(el('h3',null,'Score: '+r.score+'/100 · '+r.category+(r.score>=70?' (would get a resume in a real run)':' (would be rejected in a real run)')));
+  out.appendChild(el('div','muted','Breakdown: '+r.breakdown));
+  out.appendChild(el('div',null,'Matching skills: '+(r.matching.join(', ')||'none')));
+  out.appendChild(el('div',null,'Missing skills: '+(r.missing.join(', ')||'none')));
+  if(r.mandatory.length)out.appendChild(el('div',null,'Missing mandatory: '+r.mandatory.join(', ')));
+  var p=el('p'),a=el('a',null,'Open test resume ↗');a.href=r.docUrl;a.target='_blank';p.appendChild(a);out.appendChild(p);
+  out.appendChild(el('div',null,r.changed+' line(s) reworded'+(r.reordered?', bullets reordered':'')+' · '+r.reverted+' AI edit(s) rejected by the integrity check (original kept).'));
+  if(!r.diffs.length)out.appendChild(el('div','muted','No lines changed.'));
+  r.diffs.forEach(function(x){var row=el('div','row');row.appendChild(el('div','old',x.old));row.appendChild(el('div','new',x.new));out.appendChild(row);});
+}
+</script>`;
+
+function testResumeDialog() {
+  ui_().showModalDialog(HtmlService.createHtmlOutput(TEST_DIALOG_HTML).setWidth(720).setHeight(640), '🧪 Test resume generation');
+}
+
+/** Called from the test dialog: scores a pasted job and creates a TEST_ tailored resume (Tracker untouched). */
+function runResumeTest(title, company, description) {
+  const profile = getProfile_();
+  const resume = getResume_(profile, false);
+  const job = clean_({
+    source: 'Manual test', title: title, company: company, location: '', url: 'manual-test',
+    description: String(description).slice(0, APP.MAX_DESC_CHARS), descriptionComplete: true,
+  });
+  const ev = scoreJob_(job, profile, resume);
+  const plan = tailorResume_(job, ev, profile, resume);
+  const name = 'TEST_' + docName_(company, title) + '_' + Utilities.formatDate(new Date(), tz_(), 'HHmmss');
+  const doc = createTailoredDoc_(name, resume, plan.finalText);
+  log_('INFO', 'Test resume created: ' + name + ' (score ' + ev.score + ')');
+  return {
+    score: ev.score, category: ev.category, breakdown: ev.breakdown,
+    matching: ev.matching_skills, missing: ev.missing_skills, mandatory: ev.missing_mandatory,
+    docUrl: doc.url, changed: plan.changed, reverted: plan.reverted, reordered: plan.reordered,
+    diffs: resume.paras.filter(p => plan.finalText[p.id] !== p.text).slice(0, 40).map(p => ({ old: p.text, new: plan.finalText[p.id] })),
+  };
+}
+
+/** Runs discovery + duplicate check + pre-filter only. No AI calls, nothing written. */
+function previewJobSearch() {
+  toast_('Searching job sources…');
+  const profile = getProfile_();
+  const found = collectJobs_(profile);
+  const bySource = {};
+  found.jobs.forEach(j => { const s = j.source.replace(/\s*\(.*$/, ''); bySource[s] = (bySource[s] || 0) + 1; });
+  const unique = dedupeInRun_(found.jobs);
+  const seen = loadSeen_();
+  let dups = 0;
+  const fresh = unique.filter(j => { if (classifyAgainstSeen_(j, seen).dup) { dups++; return false; } return true; });
+  const pf = prefilter_(fresh, profile);
+  const reasons = {};
+  pf.rejected.forEach(r => { reasons[r[1]] = (reasons[r[1]] || 0) + 1; });
+  const lines = [
+    'Jobs found: ' + found.jobs.length + '  (' + Object.keys(bySource).map(k => k + ' ' + bySource[k]).join(', ') + ')',
+    'Unique after merging cross-site duplicates: ' + unique.length,
+    'Already seen before: ' + dups,
+    'Removed by pre-filter: ' + pf.rejected.length + (pf.rejected.length ? '  (' + Object.keys(reasons).map(k => k + ' ' + reasons[k]).join(', ') + ')' : ''),
+    'Would be sent to AI scoring today: ' + Math.min(pf.keep.length, profile.maxAiJobs) + ' of ' + pf.keep.length,
+    '',
+    'Top shortlisted jobs:',
+  ].concat(pf.keep.slice(0, 12).map(j => '• ' + j.title + ' | ' + j.company + (j.location ? ' (' + j.location + ')' : '') + ' [' + j.source + ']'))
+    .concat(found.errors.length ? ['', 'Source problems:'].concat(found.errors.map(e => '⚠ ' + e)) : []);
+  ui_().alert('🧪 Job search preview (nothing was saved)', lines.join('\n'), ui_().ButtonSet.OK);
 }
 
 function setup() {

@@ -51,8 +51,11 @@ There's no server, no coding agent and no paid plan. You paste one file once. Af
    * Already have a Google Doc? Skip the upload and paste its link in the Profile row "Original resume = base template".
    * Then open the **"Resume (parsed)"** tab. It lists every line of your template with **AI may edit? = Yes** (summary, bullets, skills) or **Locked** (everything else). Change any *Yes* to **No** to freeze that line too.
 10. **Menu → 4. Test connections.** Each line should show ✅ (optional sources show ➖).
-11. **Menu → ▶ Run job search now** for the first run.
-12. **Menu → ⏰ Enable daily run (9 AM).** The time uses the sheet's timezone (*File → Settings → Time zone*).
+11. **Menu → 🧪 Test tools** to check everything before the first real run:
+    * **Test resume generation:** paste a real job description. You'll see the score, the changes line by line, and a link to a `TEST_` resume. Open it and check the layout matches your original.
+    * **Preview job search:** shows which jobs would be found and shortlisted today. It uses no AI and saves nothing.
+12. **Menu → ▶ Run job search now** for the first run.
+13. **Menu → ⏰ Enable daily run (9 AM).** The time uses the sheet's timezone (*File → Settings → Time zone*).
 
 That's it. Every morning you get an email report and new rows/Docs.
 

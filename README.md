@@ -12,6 +12,8 @@ It runs **entirely on free services**. There's no server, no coding agent, and n
 |---|---|
 | `Code.gs` | The whole system. You paste it into a Google Sheet (*Extensions → Apps Script*). You never need to edit it. |
 | `SETUP.md` | Detailed step-by-step setup and troubleshooting. |
+| `tests/run-tests.js` | Offline automated tests (fake Google services + fake AI). Run with `node tests/run-tests.js`. |
+| `.github/workflows/tests.yml` | Runs the tests automatically on GitHub on every push. |
 | `README.md` | This overview. |
 
 ---
@@ -96,10 +98,43 @@ Google Drive folder "AI Job Search - Customized Resumes"
    3. **Set API keys**.
    4. **Upload my resume**.
    5. **Test connections**.
-   6. **▶ Run job search now**.
-   7. **⏰ Enable daily run**.
+   6. **🧪 Test tools → Test resume generation**: paste one real job description to see your tailored resume.
+   7. **▶ Run job search now**.
+   8. **⏰ Enable daily run**.
 
 ---
+
+## Testing
+
+### In the sheet (with your real resume and keys)
+The **🤖 AI Job Search → 🧪 Test tools** menu has two tools:
+
+| Tool | What it does | Saves anything? |
+|---|---|---|
+| **Test resume generation (paste a job)** | You paste a job title, company and description. It shows the score and breakdown, matching and missing skills, a link to a tailored resume, and every changed line (old wording crossed out in red, new wording in green). | Only a `TEST_…` Doc in the Drive folder (delete it when you're done). The Tracker isn't touched. |
+| **Preview job search (no AI, nothing saved)** | Searches all sources and shows how many jobs were found, merged as duplicates, filtered out and shortlisted, plus the top 12 titles and any source errors. | Nothing. It uses a few job-API calls and no AI calls. |
+
+Run these after setup to check everything before switching on the daily schedule.
+
+### Automated tests (no keys or Google account needed)
+```bash
+node tests/run-tests.js
+```
+These tests replace Google Docs, Drive, Sheets and the AI with fakes. They check:
+- job parsing for Adzuna, JSearch and Lever
+- duplicate detection and changed-posting detection
+- the pre-filter
+- the scoring weights and the mandatory-gap penalty
+- **end-to-end resume generation**:
+  - the template is copied
+  - allowed lines are reworded
+  - invented numbers, tools and skills are rejected
+  - locked lines (names, dates, education) never change
+  - no lines are added or removed
+  - the original template is never modified
+  - a changed template is detected
+
+GitHub runs the same tests on every push (see the **Actions** tab).
 
 ## Coverage, honestly
 
